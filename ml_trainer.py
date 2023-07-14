@@ -133,6 +133,8 @@ def compute_cvrmse(loads, predictions):
     :return:            list of cv(rmse) values for each prediction from the list
     """
     average_load = np.average(loads)
+    if math.abs(average_load) < 1e-6:
+        average_load = 1.0
     rows = loads.shape[0]
     cvrmse = [math.sqrt(np.sum((loads - predictions[i])**2) / rows) / average_load
               for i in range(len(predictions))]
