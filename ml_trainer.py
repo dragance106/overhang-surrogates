@@ -10,10 +10,10 @@ from mipt import mipt, mipt_full, LHS_maximin
 sample_size = 100   # the number of samples to be selected
 repeat_times = 10   # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 1      # the number of distinct ML models used in training
+num_models = 4      # the number of distinct ML models used in training
                     # at the moment, they are:
                     # #LATER: dnn881, dnn8551, dnn84441, dnn843331, dnn8333331, dnn83332221,
-                    # xgb,
+                    # xgb-early5-lr0.3, xgb-early5-lr0.1, xgb-early10-lr0.3, xgb-early10-lr0.1,
                     # #LATER: gbdtpl
 num_folds = 5       # number of folds for cross validation
 
@@ -44,12 +44,12 @@ def train_models(df_training, load):
     # for each ML model type
     # train num_folds models with one fold as the test set,
     # and the remaining folds as the training set
-    all_models = []
+    all_trained_models = []
 
-    # xgboost
-    xgbmodel_fold = []
+    # xgboost, early_stopping_rounds=5, learning_rate=0.3
+    xgb1_fold = []
     for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=5)
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=5, learning_rate=0.3)
 
         X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
         y_train = train_folds[i][load]
@@ -59,10 +59,58 @@ def train_models(df_training, load):
         xgbmodel.fit(X_train, y_train,
                      eval_set=[(X_test, y_test)],
                      verbose=False)
-        xgbmodel_fold.append(xgbmodel)
-    all_models.append(xgbmodel_fold)
+        xgb1_fold.append(xgbmodel)
+    all_trained_models.append(xgb1_fold)
 
-    return all_models
+    # xgboost, early_stopping_rounds=5, learning_rate=0.1
+    xgb2_fold = []
+    for i in range(num_folds):
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=5, learning_rate=0.1)
+
+        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_train = train_folds[i][load]
+        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_test = test_folds[i][load]
+
+        xgbmodel.fit(X_train, y_train,
+                     eval_set=[(X_test, y_test)],
+                     verbose=False)
+        xgb2_fold.append(xgbmodel)
+    all_trained_models.append(xgb2_fold)
+
+    # xgboost, early_stopping_rounds=10, learning_rate=0.3
+    xgb3_fold = []
+    for i in range(num_folds):
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.3)
+
+        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_train = train_folds[i][load]
+        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_test = test_folds[i][load]
+
+        xgbmodel.fit(X_train, y_train,
+                     eval_set=[(X_test, y_test)],
+                     verbose=False)
+        xgb3_fold.append(xgbmodel)
+    all_trained_models.append(xgb3_fold)
+
+    # xgboost, early_stopping_rounds=10, learning_rate=0.1
+    xgb4_fold = []
+    for i in range(num_folds):
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.1)
+
+        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_train = train_folds[i][load]
+        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_test = test_folds[i][load]
+
+        xgbmodel.fit(X_train, y_train,
+                     eval_set=[(X_test, y_test)],
+                     verbose=False)
+        xgb4_fold.append(xgbmodel)
+    all_trained_models.append(xgb4_fold)
+
+    return all_trained_models
 
 
 def predict_loads(models, df_selected):
@@ -219,7 +267,7 @@ def process_all_combinations(df):
                                                       columns=['climate', 'obstacle', 'orientation', 'heat_SP', 'cool_SP',
                                                                'load', 'sampling_method', 'num_inputs',
                                                                #LATER: 'dnn881', 'dnn8551', 'dnn84441', 'dnn843331', 'dnn8333331', 'dnn83332221',
-                                                               'xgb',
+                                                               'xgb_early5_lr0.3', 'xgb_early5_lr0.1', 'xgb_early10_lr0.3', 'xgb_early10_lr0.1',
                                                                #LATER: 'gbdtpl'
                                                                ])
     timestamp = datetime.datetime.now().strftime('%y_%m_%d_%H_%M_%S')
