@@ -10,11 +10,10 @@ from mipt import mipt, mipt_full, LHS_maximin
 sample_size = 100   # the number of samples to be selected
 repeat_times = 10   # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 4      # the number of distinct ML models used in training
+num_models = 3      # the number of distinct ML models used in training
                     # at the moment, they are:
                     # #LATER: dnn881, dnn8551, dnn84441, dnn843331, dnn8333331, dnn83332221,
-                    # xgb-early5-lr0.3, xgb-early5-lr0.1, xgb-early10-lr0.3, xgb-early10-lr0.1,
-                    # #LATER: gbdtpl
+                    # xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
 num_folds = 5       # number of folds for cross validation
 
 rng = np.random.default_rng()   # random number generator,
@@ -46,10 +45,10 @@ def train_models(df_training, load):
     # and the remaining folds as the training set
     all_trained_models = []
 
-    # xgboost, early_stopping_rounds=5, learning_rate=0.3
+    # xgboost, early_stopping_rounds=10, learning_rate=0.3
     xgb1_fold = []
     for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=5, learning_rate=0.3)
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.3)
 
         X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
         y_train = train_folds[i][load]
@@ -62,10 +61,10 @@ def train_models(df_training, load):
         xgb1_fold.append(xgbmodel)
     all_trained_models.append(xgb1_fold)
 
-    # xgboost, early_stopping_rounds=5, learning_rate=0.1
+    # xgboost, early_stopping_rounds=10, learning_rate=0.1
     xgb2_fold = []
     for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=5, learning_rate=0.1)
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.1)
 
         X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
         y_train = train_folds[i][load]
@@ -78,10 +77,10 @@ def train_models(df_training, load):
         xgb2_fold.append(xgbmodel)
     all_trained_models.append(xgb2_fold)
 
-    # xgboost, early_stopping_rounds=10, learning_rate=0.3
+    # xgboost, early_stopping_rounds=10, learning_rate=0.03
     xgb3_fold = []
     for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.3)
+        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.03)
 
         X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
         y_train = train_folds[i][load]
@@ -93,22 +92,6 @@ def train_models(df_training, load):
                      verbose=False)
         xgb3_fold.append(xgbmodel)
     all_trained_models.append(xgb3_fold)
-
-    # xgboost, early_stopping_rounds=10, learning_rate=0.1
-    xgb4_fold = []
-    for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.1)
-
-        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_train = train_folds[i][load]
-        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_test = test_folds[i][load]
-
-        xgbmodel.fit(X_train, y_train,
-                     eval_set=[(X_test, y_test)],
-                     verbose=False)
-        xgb4_fold.append(xgbmodel)
-    all_trained_models.append(xgb4_fold)
 
     return all_trained_models
 
@@ -235,11 +218,11 @@ def process_this_combination(params):
 def generate_params(df):
     # pass through all combinations of the office cell model parameters,
     # apart from the overhang depth and height
-    for climate in [4]: # range(6):
-        for obstacle in [0]: # range(5):
-            for orientation in [0.0]: # [0.0, 45.0, -45.0]:
-                for heat_SP in [21]: # [19, 21]:
-                    for cool_SP in [24]: # [24, 26]:
+    for climate in range(6): # [4]:
+        for obstacle in range(5): # [0]:
+            for orientation in [0.0, 45.0, -45.0]: # [0.0]:
+                for heat_SP in [19, 21]: # [21]:
+                    for cool_SP in [24, 26]: # [24]:
                         for load in ['heat_load [kWh/m2]', 'cool_load [kWh/m2]', 'light_load [kWh/m2]', 'primary [kWh/m2]']:
                             for sampling_method_name in ['LHS_maximin', 'mipt', 'mipt_full']:
                                 for num_inputs in [2, 8]:
@@ -267,8 +250,7 @@ def process_all_combinations(df):
                                                       columns=['climate', 'obstacle', 'orientation', 'heat_SP', 'cool_SP',
                                                                'load', 'sampling_method', 'num_inputs',
                                                                #LATER: 'dnn881', 'dnn8551', 'dnn84441', 'dnn843331', 'dnn8333331', 'dnn83332221',
-                                                               'xgb_early5_lr0.3', 'xgb_early5_lr0.1', 'xgb_early10_lr0.3', 'xgb_early10_lr0.1',
-                                                               #LATER: 'gbdtpl'
+                                                               'xgb_lr0.3', 'xgb_lr0.1', 'xgb_lr0.03',
                                                                ])
     timestamp = datetime.datetime.now().strftime('%y_%m_%d_%H_%M_%S')
     cvrmse_results_file = 'cvrmse_results_'+timestamp+'.csv'
