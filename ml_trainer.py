@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 import xgboost as xgb
 import datetime
 import math
@@ -18,6 +19,75 @@ num_folds = 5       # number of folds for cross validation
 
 rng = np.random.default_rng()   # random number generator,
                                 # used for random splitting in 5-fold cross validation
+
+def train_dnn_fold(load, train_folds, test_folds, neurons, early_stopping_rounds=10, learning_rate=0.01):
+    """ Auxiliary method for training dnn based models.
+    """
+    dnn_fold = []
+    for i in range(num_folds):
+        # the first layer with its input shape
+        layers = [tf.keras.layers.Dense(units=neurons[0], activation='relu', input_shape=[8]),
+                  tf.keras.layers.Dropout(rate=0.3),
+                  tf.keras.layers.BatchNormalization()
+                 ]
+        # the middle layers
+        for layer_width in neurons[1:]:
+            layers = layers + [tf.keras.layers.Dense(units=layer_width, activation='relu'),
+                               tf.keras.layers.Dropout(rate=0.3),
+                               tf.keras.layers.BatchNormalization()]
+        # the last layer
+        layers = layers + [tf.keras.layers.Dense(units=1)]
+
+        # dnn model structure, optimizer and loss function
+        dnn_model = tf.keras.Sequential(layers)
+        dnn_model.compile(optimizer='adam',
+                          loss='mse')
+
+        # training and test sets
+        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_train = train_folds[i][load]
+        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_test = test_folds[i][load]
+
+        # set up early stopping callback
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            min_delta=0.001,    # min change to be counted as improvement in validation loss
+            patience=10,        # number of epochs to wait before stopping training
+            start_from_epoch=10,
+            restore_best_weights=True,
+        )
+
+        # fit the model
+        dnn_model.fit(X_train, y_train,
+                      validation_data=(X_test, y_test),
+                      batch_size=10,
+                      epochs=1000,
+                      callbacks=[early_stopping],
+                      verbose=0)
+
+        # add the model to the fold
+        dnn_fold.append(dnn_model)
+
+    return dnn_fold
+
+
+def train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.3):
+    """ Auxiliary method for training xgb based models.
+    """
+    xgb_fold = []
+    for i in range(num_folds):
+        xgb_model = xgb.XGBRegressor(early_stopping_rounds=early_stopping_rounds, learning_rate=learning_rate)
+
+        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_train = train_folds[i][load]
+        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
+        y_test = test_folds[i][load]
+
+        xgb_model.fit(X_train, y_train,
+                     eval_set=[(X_test, y_test)],
+                     verbose=False)
+        xgb_fold.append(xgb_model)
+    return xgb_fold
 
 
 def train_models(df_training, load):
@@ -45,53 +115,18 @@ def train_models(df_training, load):
     # and the remaining folds as the training set
     all_trained_models = []
 
-    # xgboost, early_stopping_rounds=10, learning_rate=0.3
-    xgb1_fold = []
-    for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.3)
+    # dnn-based models with dropout and batch normalization
+    all_trained_models.append(train_dnn_fold_dropout(load, train_folds, test_folds, neurons=[8]))
+    all_trained_models.append(train_dnn_fold_dropout(load, train_folds, test_folds, neurons=[5, 5]))
+    all_trained_models.append(train_dnn_fold_dropout(load, train_folds, test_folds, neurons=[4, 4, 4]))
+    all_trained_models.append(train_dnn_fold_dropout(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    all_trained_models.append(train_dnn_fold_dropout(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
+    all_trained_models.append(train_dnn_fold_dropout(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
 
-        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_train = train_folds[i][load]
-        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_test = test_folds[i][load]
-
-        xgbmodel.fit(X_train, y_train,
-                     eval_set=[(X_test, y_test)],
-                     verbose=False)
-        xgb1_fold.append(xgbmodel)
-    all_trained_models.append(xgb1_fold)
-
-    # xgboost, early_stopping_rounds=10, learning_rate=0.1
-    xgb2_fold = []
-    for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.1)
-
-        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_train = train_folds[i][load]
-        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_test = test_folds[i][load]
-
-        xgbmodel.fit(X_train, y_train,
-                     eval_set=[(X_test, y_test)],
-                     verbose=False)
-        xgb2_fold.append(xgbmodel)
-    all_trained_models.append(xgb2_fold)
-
-    # xgboost, early_stopping_rounds=10, learning_rate=0.03
-    xgb3_fold = []
-    for i in range(num_folds):
-        xgbmodel = xgb.XGBRegressor(early_stopping_rounds=10, learning_rate=0.03)
-
-        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_train = train_folds[i][load]
-        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_test = test_folds[i][load]
-
-        xgbmodel.fit(X_train, y_train,
-                     eval_set=[(X_test, y_test)],
-                     verbose=False)
-        xgb3_fold.append(xgbmodel)
-    all_trained_models.append(xgb3_fold)
+    # xgboost-based models (already trained, so commented!)
+    # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.3))
+    # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.1))
+    # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.03))
 
     return all_trained_models
 
@@ -133,7 +168,7 @@ def compute_cvrmse(loads, predictions):
     :return:            list of cv(rmse) values for each prediction from the list
     """
     average_load = np.average(loads)
-    if math.abs(average_load) < 1e-6:
+    if abs(average_load) < 1e-6:
         average_load = 1.0
     rows = loads.shape[0]
     cvrmse = [math.sqrt(np.sum((loads - predictions[i])**2) / rows) / average_load
