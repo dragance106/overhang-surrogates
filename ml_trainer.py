@@ -9,11 +9,11 @@ import multiprocessing as mp
 from mipt import mipt, mipt_full, LHS_maximin
 
 sample_size = 100   # the number of samples to be selected
-repeat_times = 3    # the number of ML models to be trained for each parameter combination,
+repeat_times = 10   # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 2      # the number of distinct ML models used in training
+num_models = 6      # the number of distinct ML models used in training
                     # at the moment, they are:
-                    # dnn881, dnn8551, dnn84441, dnn843331, dnn8333331, dnn83332221,
+                    # dnn8-10-1, dnn8551, dnn84441, dnn843331, dnn8333331, dnn83332221,
                     # xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
 num_folds = 5       # number of folds for cross validation
 
@@ -52,10 +52,10 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
 
         # set up early stopping callback
         early_stopping = tf.keras.callbacks.EarlyStopping(
-            min_delta=0.001,    # min change to be counted as improvement in validation loss
+            min_delta=0.001,
             patience=10,        # number of epochs to wait before stopping training
-            start_from_epoch=10,
             restore_best_weights=True,
+            start_from_epoch=10
         )
 
         # fit the model
@@ -117,12 +117,12 @@ def train_models(df_training, load):
     all_trained_models = []
 
     # dnn-based models with dropout and batch normalization
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[10]))
     all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
     all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
 
     # xgboost-based models (already trained, so commented!)
     # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.3))
@@ -290,8 +290,7 @@ def process_all_combinations(df):
     df_all_cvrmse_results = pd.DataFrame.from_records(data=all_cvrmse_results,
                                                       columns=['climate', 'obstacle', 'orientation', 'heat_SP', 'cool_SP',
                                                                'load', 'sampling_method', 'num_inputs',
-                                                               'dnn8551', 'dnn8333331',
-                                                               #LATER: 'dnn881', 'dnn8551', 'dnn84441', 'dnn843331', 'dnn8333331', 'dnn83332221',
+                                                               'dnn8101', 'dnn8551', 'dnn84441', 'dnn843331', 'dnn8333331', 'dnn83332221',
                                                                #'xgb_lr0.3', 'xgb_lr0.1', 'xgb_lr0.03',
                                                                ])
     timestamp = datetime.datetime.now().strftime('%y_%m_%d_%H_%M_%S')
