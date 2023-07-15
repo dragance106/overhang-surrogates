@@ -20,7 +20,7 @@ num_folds = 5       # number of folds for cross validation
 rng = np.random.default_rng()   # random number generator,
                                 # used for random splitting in 5-fold cross validation
 
-def train_dnn_fold(load, train_folds, test_folds, neurons, early_stopping_rounds=10, learning_rate=0.01):
+def train_dnn_fold(load, train_folds, test_folds, neurons):
     """ Auxiliary method for training dnn based models.
     """
     dnn_fold = []
