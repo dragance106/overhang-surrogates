@@ -11,7 +11,7 @@ from mipt import mipt, mipt_full, LHS_maximin
 sample_size = 100   # the number of samples to be selected
 repeat_times = 10   # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 6      # the number of distinct ML models used in training
+num_models = 2      # the number of distinct ML models used in training
                     # at the moment, they are:
                     # dnn881, dnn8551, dnn84441, dnn843331, dnn8333331, dnn83332221,
                     # xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
@@ -25,6 +25,8 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
     """
     dnn_fold = []
     for i in range(num_folds):
+        print(f'  training dnn model with mid-neurons: {neurons}, fold={i}')
+
         # the first layer with its input shape
         layers = [tf.keras.layers.Dense(units=neurons[0], activation='relu', input_shape=[8]),
                   tf.keras.layers.Dropout(rate=0.3),
@@ -117,11 +119,11 @@ def train_models(df_training, load):
 
     # dnn-based models with dropout and batch normalization
     all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
     all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
 
     # xgboost-based models (already trained, so commented!)
     # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.3))
@@ -146,6 +148,8 @@ def predict_loads(models, df_selected):
         for model in model_fold:
             preds = model.predict(df_selected[['dnorm', 'hnorm', 'diagnorm', 'area',
                                                'sine', 'cosine', 'd/h', 'h/d']])
+            preds = preds.reshape((df_selected.shape[0],))      # gets rid of the additional dimension imposed by tensorflow
+
             sum_preds += preds
         sum_preds /= len(model_fold)
 
@@ -255,14 +259,14 @@ def process_this_combination(params):
 def generate_params(df):
     # pass through all combinations of the office cell model parameters,
     # apart from the overhang depth and height
-    for climate in range(6): # [4]:
-        for obstacle in range(5): # [0]:
-            for orientation in [0.0, 45.0, -45.0]: # [0.0]:
-                for heat_SP in [19, 21]: # [21]:
-                    for cool_SP in [24, 26]: # [24]:
-                        for load in ['heat_load [kWh/m2]', 'cool_load [kWh/m2]', 'light_load [kWh/m2]', 'primary [kWh/m2]']:
-                            for sampling_method_name in ['LHS_maximin', 'mipt', 'mipt_full']:
-                                for num_inputs in [2, 8]:
+    for climate in [4]: # range(6):
+        for obstacle in [0]: # range(5):
+            for orientation in [0.0]: # [0.0, 45.0, -45.0]:
+                for heat_SP in [21]: # [19, 21]:
+                    for cool_SP in [24]: # [24, 26]:
+                        for load in ['heat_load [kWh/m2]']: # ['heat_load [kWh/m2]', 'cool_load [kWh/m2]', 'light_load [kWh/m2]', 'primary [kWh/m2]']:
+                            for sampling_method_name in ['mipt_full']: # ['LHS_maximin', 'mipt', 'mipt_full']:
+                                for num_inputs in [8]: # [2, 8]:
                                     yield(df, climate, obstacle, orientation, heat_SP, cool_SP,
                                           load, sampling_method_name, num_inputs)
 
