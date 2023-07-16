@@ -221,7 +221,7 @@ lhs = Lhs(criterion='maximin', iterations=10000)
 
 def LHS_maximin(n, dim=2):
     """
-    Bridge between a general sampling call in ml_trainer.py and
+    Bridge between a general sampling call in trainer_xbg.py and
     skopt.sampler.Lhs from the scikit-optimize package.
     """
 

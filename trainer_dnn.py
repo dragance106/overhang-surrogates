@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import xgboost as xgb
+import torch
+import torch.nn as nn
 import datetime
+import copy
 import math
 import multiprocessing as mp
 import os
@@ -12,17 +14,124 @@ from mipt import mipt, mipt_full, LHS_maximin
 sample_size = 100   # the number of samples to be selected
 repeat_times = 5    # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 3      # the number of distinct ML models used in training
+num_models = 2      # the number of distinct ML models used in training
                     # at the moment, they are:
-                    # dnn881, dnn8631, dnn843331
-                    # xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
+                    # dnn variants: dnn8551, dnn8333331
+                    # xbg variants: xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
 num_folds = 5       # number of folds for cross validation
 
 rng = np.random.default_rng()   # random number generator,
                                 # used for random splitting in 5-fold cross validation
 
+
+# implementation of early stopping
+class EarlyStopping:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = np.inf
+        self.best_model = None
+
+    def should_stop(self, validation_loss, model):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.best_model = copy.deepcopy(model)
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
+    def get_best_model(self):
+        return self.best_model
+
+
 def train_dnn_fold(load, train_folds, test_folds, neurons):
-    """ Auxiliary method for training dnn based models.
+    """ Auxiliary method for training dnn based models with torch.
+    """
+    dnn_fold = []
+    for i in range(num_folds):
+        # print(f'training dnn{neurons} - fold {i}...')
+
+        # the first layer with its input shape
+        dnn_model = nn.Sequential(nn.Linear(8, neurons[0]),
+                                  nn.ReLU(),
+                                  nn.Dropout(0.3),
+                                  nn.BatchNorm1d(neurons[0]))
+        # the interior layers
+        for i in range(1, len(neurons)):
+            dnn_model.append(nn.Linear(neurons[i-1], neurons[i]))
+            dnn_model.append(nn.ReLU())
+            dnn_model.append(nn.Dropout(0.3))
+            dnn_model.append(nn.BatchNorm1d(neurons[i]))
+        # the last layer
+        dnn_model.append(nn.Linear(neurons[-1], 1))
+
+        # other model training parameters
+        objective = nn.MSELoss()
+        optimizer = torch.optim.Adam(params=dnn_model.parameters(), lr=0.001)
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+        early_stopping = EarlyStopping(patience=10, min_delta=0.001)
+
+        # prepare training and test sets
+        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']].to_numpy(dtype=np.float32)
+        X_train_t = torch.from_numpy(X_train)
+        y_train = train_folds[i][load].to_numpy(dtype=np.float32)
+        y_train_t = torch.from_numpy(y_train)
+        y_train_t = torch.unsqueeze(y_train_t, -1)      # to appropriately transform the shape
+        train_set = torch.utils.data.TensorDataset(X_train_t, y_train_t)
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=10)
+
+        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']].to_numpy(dtype=np.float32)
+        X_test_t = torch.from_numpy(X_test)
+        y_test = test_folds[i][load].to_numpy(dtype=np.float32)
+        y_test_t = torch.from_numpy(y_test)
+        y_test_t = torch.unsqueeze(y_test_t, -1)
+        test_set = torch.utils.data.TensorDataset(X_test_t, y_test_t)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=10)
+
+        # training/validation loop
+        for epoch in range(1000):
+            # train the model
+            dnn_model.train()
+            total_train_loss = 0.0
+            for idx, (X_train_t, y_train_t) in enumerate(train_loader):
+                optimizer.zero_grad()
+                pred_t = dnn_model(X_train_t)
+                loss = objective(pred_t, y_train_t)
+                total_train_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+            total_train_loss /= idx+1
+
+            # validate the model
+            dnn_model.eval()
+            total_val_loss = 0.0
+            for idx, (X_test_t, y_test_t) in enumerate(test_loader):
+                pred_t = dnn_model(X_test_t)
+                val_loss = objective(pred_t, y_test_t)
+                total_val_loss += val_loss.item()
+            total_val_loss /= idx+1
+
+            # early stopping?
+            if early_stopping.should_stop(total_val_loss, dnn_model):
+                # dnn_model = copy.deepcopy(early_stopping.get_best_model())
+                # print(f'... training early stopped after {epoch} epochs...')
+                break
+
+            # update learning rate, if necessary
+            # scheduler.step()
+
+        # add the model to the fold
+        dnn_fold.append(dnn_model)
+
+    return dnn_fold
+
+
+def train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons):
+    """ Auxiliary method for training dnn based models in tensorflow.
     """
     dnn_fold = []
     for i in range(num_folds):
@@ -71,25 +180,6 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
     return dnn_fold
 
 
-def train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.3):
-    """ Auxiliary method for training xgb based models.
-    """
-    xgb_fold = []
-    for i in range(num_folds):
-        xgb_model = xgb.XGBRegressor(early_stopping_rounds=early_stopping_rounds, learning_rate=learning_rate)
-
-        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_train = train_folds[i][load]
-        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_test = test_folds[i][load]
-
-        xgb_model.fit(X_train, y_train,
-                     eval_set=[(X_test, y_test)],
-                     verbose=False)
-        xgb_fold.append(xgb_model)
-    return xgb_fold
-
-
 def train_models(df_training, load):
     """ Uses 5-fold cross validation to train ML models
         Each ML "model" is actually a collection/list of 5 models
@@ -116,17 +206,16 @@ def train_models(df_training, load):
     all_trained_models = []
 
     # dnn-based models with dropout and batch normalization
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[6, 3]))
+    all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[8]))
+    all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[6, 3]))
+    all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
-
-    # xgboost-based models (already trained, so commented!)
-    # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.3))
-    # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.1))
-    # all_trained_models.append(train_xgb_fold(load, train_folds, test_folds, early_stopping_rounds=10, learning_rate=0.03))
 
     return all_trained_models
 
@@ -144,9 +233,16 @@ def predict_loads(models, df_selected):
     for model_fold in models:
         sum_preds = np.zeros(df_selected.shape[0])
         for model in model_fold:
-            preds = model.predict(df_selected[['dnorm', 'hnorm', 'diagnorm', 'area',
-                                               'sine', 'cosine', 'd/h', 'h/d']])
-            preds = preds.reshape((df_selected.shape[0],))      # gets rid of the additional dimension imposed by tensorflow
+            # prediction with tensorflow
+            # preds = model.predict(df_selected[['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']])
+
+            # prediction with pytorch is a bit low level...
+            model.eval()
+            input = df_selected[['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']].to_numpy(dtype=np.float32)
+            input_t = torch.from_numpy(input)
+            preds = model(input_t).detach().numpy()
+            # gets rid of the additional dimension
+            preds = preds.reshape((df_selected.shape[0],))
 
             sum_preds += preds
         sum_preds /= len(model_fold)
@@ -258,14 +354,14 @@ def process_this_combination(params):
 def generate_params(df):
     # pass through all combinations of the office cell model parameters,
     # apart from the overhang depth and height
-    for climate in [0, 1, 2, 3]: # range(6):
-        for obstacle in range(5):
-            for orientation in [0.0, 45.0, -45.0]:
-                for heat_SP in [19, 21]:
-                    for cool_SP in [24, 26]:
+    for climate in [4]: # range(6):
+        for obstacle in [0]: # range(5):
+            for orientation in [0.0]: # [0.0, 45.0, -45.0]:
+                for heat_SP in [19]: # [19, 21]:
+                    for cool_SP in [24]: # [24, 26]:
                         for load in ['heat_load [kWh/m2]', 'cool_load [kWh/m2]', 'light_load [kWh/m2]', 'primary [kWh/m2]']:
-                            for sampling_method_name in ['LHS_maximin', 'mipt', 'mipt_full']:
-                                for num_inputs in [2, 8]:
+                            for sampling_method_name in ['mipt_full']: # ['LHS_maximin', 'mipt', 'mipt_full']:
+                                for num_inputs in [2]: # [2, 8]:
                                     yield(df, climate, obstacle, orientation, heat_SP, cool_SP,
                                           load, sampling_method_name, num_inputs)
 
@@ -289,8 +385,7 @@ def process_all_combinations(df):
     df_all_cvrmse_results = pd.DataFrame.from_records(data=all_cvrmse_results,
                                                       columns=['climate', 'obstacle', 'orientation', 'heat_SP', 'cool_SP',
                                                                'load', 'sampling_method', 'num_inputs',
-                                                               'dnn881', 'dnn8631', 'dnn843331',
-                                                               #'xgb_lr0.3', 'xgb_lr0.1', 'xgb_lr0.03',
+                                                               'dnn8551', 'dnn8333331',
                                                                ])
     timestamp = datetime.datetime.now().strftime('%y_%m_%d_%H_%M_%S')
     cvrmse_results_file = 'cvrmse_results_'+timestamp+'.csv'
@@ -299,6 +394,7 @@ def process_all_combinations(df):
 
 if __name__=="__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    print(f'loading simulation data...')
     df = pd.read_csv('collected_results.csv')
     mp.freeze_support()
     process_all_combinations(df)
