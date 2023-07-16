@@ -26,8 +26,6 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
     """
     dnn_fold = []
     for i in range(num_folds):
-        print(f'  training dnn model with mid-neurons: {neurons}, fold={i}')
-
         # the first layer with its input shape
         layers = [tf.keras.layers.Dense(units=neurons[0], activation='relu', input_shape=[8]),
                   tf.keras.layers.Dropout(rate=0.3),
@@ -220,7 +218,8 @@ def process_this_combination(params):
     sum_cvrmse_results = np.zeros(num_models)
 
     # repeat necessary number of times
-    for _ in range(repeat_times):
+    for rtc in range(repeat_times):
+        print('  repeat times counter={rtc}...')
 
         # make a sample of height/depth values
         if sampling_method_name=='mipt':
