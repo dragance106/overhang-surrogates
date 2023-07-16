@@ -219,7 +219,7 @@ def process_this_combination(params):
 
     # repeat necessary number of times
     for rtc in range(repeat_times):
-        print('  repeat times counter={rtc}...')
+        print(f'  repeat times counter={rtc}...')
 
         # make a sample of height/depth values
         if sampling_method_name=='mipt':
@@ -258,7 +258,7 @@ def process_this_combination(params):
 def generate_params(df):
     # pass through all combinations of the office cell model parameters,
     # apart from the overhang depth and height
-    for climate in range(6):
+    for climate in [0, 1, 2, 3]: # range(6):
         for obstacle in range(5):
             for orientation in [0.0, 45.0, -45.0]:
                 for heat_SP in [19, 21]:
