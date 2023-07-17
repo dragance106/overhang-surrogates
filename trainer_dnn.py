@@ -210,6 +210,7 @@ def train_models(df_training, load):
 
     # dnn-based models with dropout and batch normalization
     # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[8]))
+    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[5, 5]))
     # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[6, 3]))
     # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
 
