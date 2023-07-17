@@ -1,10 +1,9 @@
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+# import tensorflow as tf
 import torch
 import torch.nn as nn
 import datetime
-import copy
 import math
 import multiprocessing as mp
 import os
@@ -14,9 +13,9 @@ from mipt import mipt, mipt_full, LHS_maximin
 sample_size = 100   # the number of samples to be selected
 repeat_times = 5    # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 2      # the number of distinct ML models used in training
+num_models = 4      # the number of distinct ML models used in training
                     # at the moment, they are:
-                    # dnn variants: dnn8551, dnn8333331
+                    # dnn variants: dnn881, dnn8551, dnn8631, dnn843331
                     # xbg variants: xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
 num_folds = 5       # number of folds for cross validation
 
@@ -24,28 +23,32 @@ rng = np.random.default_rng()   # random number generator,
                                 # used for random splitting in 5-fold cross validation
 
 
-# implementation of early stopping
+# re-implementation of tensorflow's early stopping
 class EarlyStopping:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
         self.min_validation_loss = np.inf
-        self.best_model = None
+        self.best_model_dict = None
 
     def should_stop(self, validation_loss, model):
-        if validation_loss < self.min_validation_loss:
-            self.min_validation_loss = validation_loss
-            self.best_model = copy.deepcopy(model)
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta):
-            self.counter += 1
-            if self.counter >= self.patience:
-                return True
-        return False
+        # in case no progress is ever made, keep track of the weights from the first epoch
+        if self.best_model_dict is None:
+            self.best_model_dict = model.state_dict()
 
-    def get_best_model(self):
-        return self.best_model
+        self.counter += 1
+        if validation_loss < self.min_validation_loss - self.min_delta:
+            self.min_validation_loss = validation_loss
+            self.best_model_dict = model.state_dict()
+            self.counter = 0
+        return self.counter >= self.patience
+
+    def restore_weights(self, model):
+        model.load_state_dict(self.best_model_dict)
+
+    def get_best_model_dict(self):
+        return self.best_model_dict
 
 
 def train_dnn_fold(load, train_folds, test_folds, neurons):
@@ -71,8 +74,8 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
 
         # other model training parameters
         objective = nn.MSELoss()
-        optimizer = torch.optim.Adam(params=dnn_model.parameters(), lr=0.001)
-        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+        optimizer = torch.optim.Adam(params=dnn_model.parameters(), lr=0.003)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=75, gamma=0.5)
         early_stopping = EarlyStopping(patience=10, min_delta=0.001)
 
         # prepare training and test sets
@@ -117,12 +120,12 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
 
             # early stopping?
             if early_stopping.should_stop(total_val_loss, dnn_model):
-                # dnn_model = copy.deepcopy(early_stopping.get_best_model())
-                # print(f'... training early stopped after {epoch} epochs...')
+                early_stopping.restore_weights(dnn_model)
+                # dnn_model.load_state_dict(early_stopping.get_best_model_dict())
                 break
 
             # update learning rate, if necessary
-            # scheduler.step()
+            scheduler.step()
 
         # add the model to the fold
         dnn_fold.append(dnn_model)
@@ -206,14 +209,15 @@ def train_models(df_training, load):
     all_trained_models = []
 
     # dnn-based models with dropout and batch normalization
-    all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[8]))
-    all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[6, 3]))
-    all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[8]))
+    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[6, 3]))
+    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
 
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[6, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
 
@@ -385,7 +389,7 @@ def process_all_combinations(df):
     df_all_cvrmse_results = pd.DataFrame.from_records(data=all_cvrmse_results,
                                                       columns=['climate', 'obstacle', 'orientation', 'heat_SP', 'cool_SP',
                                                                'load', 'sampling_method', 'num_inputs',
-                                                               'dnn8551', 'dnn8333331',
+                                                               'dnn881', 'dnn8551', 'dnn8631', 'dnn843331',
                                                                ])
     timestamp = datetime.datetime.now().strftime('%y_%m_%d_%H_%M_%S')
     cvrmse_results_file = 'cvrmse_results_'+timestamp+'.csv'
@@ -393,7 +397,7 @@ def process_all_combinations(df):
 
 
 if __name__=="__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     print(f'loading simulation data...')
     df = pd.read_csv('collected_results.csv')
     mp.freeze_support()
