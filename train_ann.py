@@ -1,19 +1,17 @@
 import numpy as np
 import pandas as pd
-# import tensorflow as tf
 import torch
 import torch.nn as nn
 import datetime
 import math
 import multiprocessing as mp
-import os
 
 from mipt import mipt, mipt_full, LHS_maximin
 
 sample_size = 100   # the number of samples to be selected
 repeat_times = 5    # the number of ML models to be trained for each parameter combination,
                     # keeping only their average cvrmse as the final result
-num_models = 4      # the number of distinct ML models used in training
+num_models = 1      # the number of distinct ML models used in training
                     # at the moment, they are:
                     # dnn variants: dnn881, dnn8551, dnn8631, dnn843331
                     # xbg variants: xgb-early10-lr0.3, xgb-early10-lr0.1, xgb-early10-lr0.03
@@ -133,56 +131,6 @@ def train_dnn_fold(load, train_folds, test_folds, neurons):
     return dnn_fold
 
 
-def train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons):
-    """ Auxiliary method for training dnn based models in tensorflow.
-    """
-    dnn_fold = []
-    for i in range(num_folds):
-        # the first layer with its input shape
-        layers = [tf.keras.layers.Dense(units=neurons[0], activation='relu', input_shape=[8]),
-                  tf.keras.layers.Dropout(rate=0.3),
-                  tf.keras.layers.BatchNormalization()]
-        # the middle layers
-        for layer_width in neurons[1:]:
-            layers = layers + [tf.keras.layers.Dense(units=layer_width, activation='relu'),
-                               tf.keras.layers.Dropout(rate=0.3),
-                               tf.keras.layers.BatchNormalization()]
-        # the last layer
-        layers = layers + [tf.keras.layers.Dense(units=1)]
-
-        # dnn model structure, optimizer and loss function
-        dnn_model = tf.keras.Sequential(layers)
-        dnn_model.compile(optimizer='adam',
-                          loss='mse')
-
-        # training and test sets
-        X_train = train_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_train = train_folds[i][load]
-        X_test = test_folds[i][['dnorm', 'hnorm', 'diagnorm', 'area', 'sine', 'cosine', 'd/h', 'h/d']]
-        y_test = test_folds[i][load]
-
-        # set up early stopping callback
-        early_stopping = tf.keras.callbacks.EarlyStopping(
-            min_delta=0.001,
-            patience=10,        # number of epochs to wait before stopping training
-            restore_best_weights=True,
-            # start_from_epoch=10
-        )
-
-        # fit the model
-        dnn_model.fit(X_train, y_train,
-                      validation_data=(X_test, y_test),
-                      batch_size=10,
-                      epochs=1000,
-                      callbacks=[early_stopping],
-                      verbose=0)
-
-        # add the model to the fold
-        dnn_fold.append(dnn_model)
-
-    return dnn_fold
-
-
 def train_models(df_training, load):
     """ Uses 5-fold cross validation to train ML models
         Each ML "model" is actually a collection/list of 5 models
@@ -209,16 +157,11 @@ def train_models(df_training, load):
     all_trained_models = []
 
     # dnn-based models with dropout and batch normalization
-    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[8]))
-    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[5, 5]))
-    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[6, 3]))
-    # all_trained_models.append(train_dnn_fold_tensorflow(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
-
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[6, 3]))
-    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[6, 3]))
+    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
 
@@ -320,7 +263,7 @@ def process_this_combination(params):
 
     # repeat necessary number of times
     for rtc in range(repeat_times):
-        print(f'  repeat times counter={rtc}...')
+        # print(f'  repeat times counter={rtc}...')
 
         # make a sample of height/depth values
         if sampling_method_name=='mipt':
@@ -359,14 +302,14 @@ def process_this_combination(params):
 def generate_params(df):
     # pass through all combinations of the office cell model parameters,
     # apart from the overhang depth and height
-    for climate in [4]: # range(6):
-        for obstacle in [0]: # range(5):
-            for orientation in [0.0]: # [0.0, 45.0, -45.0]:
-                for heat_SP in [19]: # [19, 21]:
-                    for cool_SP in [24]: # [24, 26]:
+    for climate in range(6):
+        for obstacle in range(5):
+            for orientation in [0.0, 45.0, -45.0]:
+                for heat_SP in [19, 21]:
+                    for cool_SP in [24, 26]:
                         for load in ['heat_load [kWh/m2]', 'cool_load [kWh/m2]', 'light_load [kWh/m2]', 'primary [kWh/m2]']:
-                            for sampling_method_name in ['mipt_full']: # ['LHS_maximin', 'mipt', 'mipt_full']:
-                                for num_inputs in [2]: # [2, 8]:
+                            for sampling_method_name in ['LHS_maximin', 'mipt', 'mipt_full']:
+                                for num_inputs in [2, 8]:
                                     yield(df, climate, obstacle, orientation, heat_SP, cool_SP,
                                           load, sampling_method_name, num_inputs)
 
@@ -390,7 +333,8 @@ def process_all_combinations(df):
     df_all_cvrmse_results = pd.DataFrame.from_records(data=all_cvrmse_results,
                                                       columns=['climate', 'obstacle', 'orientation', 'heat_SP', 'cool_SP',
                                                                'load', 'sampling_method', 'num_inputs',
-                                                               'dnn881', 'dnn8551', 'dnn8631', 'dnn843331',
+                                                               'dnn84441',
+                                                               # 'dnn881', 'dnn8551', 'dnn8631', 'dnn843331',
                                                                ])
     timestamp = datetime.datetime.now().strftime('%y_%m_%d_%H_%M_%S')
     cvrmse_results_file = 'cvrmse_results_'+timestamp+'.csv'
@@ -398,7 +342,6 @@ def process_all_combinations(df):
 
 
 if __name__=="__main__":
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     print(f'loading simulation data...')
     df = pd.read_csv('collected_results.csv')
     mp.freeze_support()

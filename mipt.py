@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sb
 from itertools import combinations
+import timeit
 
 def proj_dist(candidates, sampled):
     """
@@ -221,7 +222,7 @@ lhs = Lhs(criterion='maximin', iterations=10000)
 
 def LHS_maximin(n, dim=2):
     """
-    Bridge between a general sampling call in trainer_xbg.py and
+    Bridge between a general sampling call in train_xgb.py and
     skopt.sampler.Lhs from the scikit-optimize package.
     """
 
@@ -231,21 +232,36 @@ def LHS_maximin(n, dim=2):
 
 if __name__=="__main__":
     n = 100
+
+    tic = timeit.default_timer()
     sample1 = mipt(n)
     min_inter1 = inter_quality(sample1)
     min_proj1 = proj_quality(sample1)
+    toc = timeit.default_timer()
+    print(f'MIPT time: {toc-tic} sec.')
 
+    tic = toc
     sample2 = mipt_full(n)
     min_inter2 = inter_quality(sample2)
     min_proj2 = proj_quality(sample2)
+    toc = timeit.default_timer()
+    print(f'MIPT-full time: {toc-tic} sec.')
+
+    tic = toc
+    sample3 = np.array(LHS_maximin(n))
+    min_inter3 = inter_quality(sample3)
+    min_proj3 = proj_quality(sample3)
+    toc = timeit.default_timer()
+    print(f'LHS-maximin time: {toc-tic} sec.')
 
     # extend samples with the origin indicator
     ones = np.ones((n,1))
     twos = 2*np.ones((n,1))
-    all_points = np.block([[sample1, ones], [sample2, twos]])
+    threes = 3*np.ones((n,1))
+    all_points = np.block([[sample1, ones], [sample2, twos], [sample3, threes]])
 
-    plt.figure(1, figsize=(6, 6), dpi=200, layout='constrained')
-    plt.title(label=f'{n} samples, inter1={min_inter1:.5f}, proj1={min_proj1:.5f}, inter2={min_inter2:.5f}, proj2={min_proj2:.5f}', fontsize=8, color='darkred')
+    plt.figure(1, figsize=(6, 6), dpi=300, layout='constrained')
+    plt.title(label=f'{n} samples, inter1={min_inter1:.5f}, proj1={min_proj1:.5f}, inter2={min_inter2:.5f}, proj2={min_proj2:.5f}, inter3={min_inter3:.5f}, proj3={min_proj3:.5f}', fontsize=7, color='darkred')
     sb.scatterplot(x=all_points[:,0], y=all_points[:,1], hue=all_points[:,2])
     plt.savefig(f'sample {n}.png')
     plt.cla()

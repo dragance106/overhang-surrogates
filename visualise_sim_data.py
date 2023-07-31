@@ -338,6 +338,87 @@ def create_diagrams(original_df, climate, obstacle, orientation, heat_SP, cool_S
     primary_diagram(verts4, faces, ZT, filename=f'fig_primary_cl{climate}_ob{obstacle}_or{orientation}_hs{heat_SP}_cs{cool_SP}.png')
 
 
+def draw_heating_for_graphical_abstract():
+    print(f'loading simulation data...')
+    df = pd.read_csv('collected_results.csv')
+    # starting case
+    df = df[(df.climate==4) &
+            (df.obstacle==0) &
+            (df.orientation==0) &
+            (df.heat_SP==21) &
+            (df.cool_SP==24)]
+    df = df.sort_values(['height', 'depth'])
+
+    xsize = df['depth'].nunique()
+    ysize = df['height'].nunique()
+
+    print(f'translating heating load values...')
+    X = df['depth'].to_numpy()
+    Y = df['height'].to_numpy()
+    ZH = (df['heat_load [kWh/m2]'].to_numpy() - 30) / 30
+
+    # mesh vertices
+    vertsH = list(zip(X,Y,ZH))
+
+    # mesh faces, i.e., triangles
+    faces = [(xsize*j+i, xsize*j+i+1, xsize*j+xsize+i+1) for i in range(xsize-1) for j in range(ysize-1)] + \
+            [(xsize*j+i, xsize*j+xsize+i, xsize*j+xsize+i+1) for i in range(xsize-1) for j in range(ysize-1)]
+
+    print(f'preparing the heating load visualizations...')
+    meshH = Mesh([vertsH, faces])
+    meshH.pointdata['heating load'] = ZH       # you must first associate numerical data to its points
+    meshH.pointdata.select('heating load')        # and then make them "active"
+    meshH.cmap(colorcet.CET_L3)     # ('terrain')
+
+    isolH = meshH.isolines(n=27).color('w')
+    isolH.lw(3)
+
+    camH = dict(
+        position=(-3, -2.25, 2.0),
+        focal_point=(0.75, 0.25, 0.6),
+        viewup=(0, 0, 1),
+        distance=3.0,
+        clipping_range=(1.0, 6.0),
+    )
+    lightH = Light(pos=(-1, 1, 3), focal_point=camH["focal_point"], c='w', intensity=1)
+    pltH = Plotter(N=1, size=(1200,1000),
+                       axes = dict(xtitle='depth (m)',
+                                   xtitle_offset=0.175,
+                                   xtitle_size=0.0165,
+                                   xtitle_position=0.24,
+                                   xlabel_size=0.012,
+                                   xaxis_rotation=90,
+                                   xygrid=True,
+                                   ytitle='height (m)',
+                                   ytitle_offset=0.025,
+                                   ytitle_size=0.015,
+                                   ytitle_rotation=(-90,0,90),
+                                   ytitle_position=0.65,
+                                   ylabel_size=0.012,
+                                   ylabel_offset=0.85,
+                                   yzgrid=False,
+                                   yzgrid2=True,
+                                   ztitle='heating load (kWh/m2)',
+                                   ztitle_offset=-0.06,
+                                   ztitle_position=1.05,
+                                   ztitle_size=0.015,
+                                   ztitle_rotation=(90,0,15),
+                                   zlabel_size=0.012,
+                                   zaxis_rotation=-105,
+                                   zshift_along_x = 1,
+                                   zrange=(0.4, 1.01),
+                                   z_values_and_labels=[(i, f'{30*i+30:.2f}') for i in np.linspace(0.4, 1.0, 7)],
+                                   zxgrid2=True,
+                                   axes_linewidth=3,
+                                   grid_linewidth=2,
+                                   number_of_divisions=16,
+                                   text_scale=1.8)).parallel_projection(value=True)
+    pltH.show(meshH, isolH, lightH, camera=camH, interactive=False, zoom=2)
+                                  # interactive=False when you know all the settings
+    pltH.screenshot(f'fig_models/graphical_abstract.png')   # and uncomment this to save the view to the external file
+    pltH.close()
+
+
 if __name__=="__main__":
     # read the simulation results from the external csv file
     original_df = pd.read_csv("collected_results.csv")
@@ -381,7 +462,9 @@ if __name__=="__main__":
     #     create_diagrams(original_df, clim, obst, orient, heat_SP, cool_SP)
 
     # Diagram set 4: Impact of heating and cooling set points
-    ds4_tuples = [(basic_clim, basic_obst, basic_orient, heat_SP, cool_SP) for heat_SP in [19, 21] for cool_SP in [24, 26]]
-    for (clim, obst, orient, heat_SP, cool_SP) in ds4_tuples:
+    # ds4_tuples = [(basic_clim, basic_obst, basic_orient, heat_SP, cool_SP) for heat_SP in [19, 21] for cool_SP in [24, 26]]
+    # for (clim, obst, orient, heat_SP, cool_SP) in ds4_tuples:
     #     basic_statistics(original_df, clim, obst, orient, heat_SP, cool_SP)
-        create_diagrams(original_df, clim, obst, orient, heat_SP, cool_SP)
+    #     create_diagrams(original_df, clim, obst, orient, heat_SP, cool_SP)
+
+    draw_heating_for_graphical_abstract()
