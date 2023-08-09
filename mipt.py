@@ -67,7 +67,7 @@ def mipt(n, dim=2, alpha=0.5, k=100):
     :param n:     the number of sample points to be generated
     :param dim:   the dimension of the design space
     :param alpha: the tolerance parameter for the minimum projected distance:
-                  any candidate points with projected distance smaller than 2*alpha/n is discarded
+                  any candidate points with projected distance smaller than alpha/n is discarded
     :param k:     the number of candidate points to be generated in the i-th iteration
                   (after i-1 points have already been generated)
                   will be equal to k*i
@@ -90,7 +90,7 @@ def mipt(n, dim=2, alpha=0.5, k=100):
 
         # from each candidate point to the s already selected sample points
         # compute projected distance, intersite distance and score them
-        dmin = alpha/s
+        dmin = alpha/(s+1)
         zeros = np.zeros((k*s,))
         prd = proj_dist(candidates, sample[:s])
         ind = inter_dist(candidates, sample[:s])
@@ -114,7 +114,7 @@ def mipt(n, dim=2, alpha=0.5, k=100):
     return sample
 
 
-def mipt_full(n, dim=2, alpha=0.5, k=100):
+def mipt_full(n, dim=2, alpha=0.5, k=100, negligible=1e-6):
     """
     Implementation of the Crombecq's mc-intersite-proj-th sampling scheme,
     in which the new candidate points are generated only within the allowed intervals,
@@ -124,10 +124,12 @@ def mipt_full(n, dim=2, alpha=0.5, k=100):
     :param n:     the number of sample points to be generated
     :param dim:   the dimension of the design space
     :param alpha: the tolerance parameter for the minimum projected distance:
-                  any candidate points with projected distance smaller than 2*alpha/n is discarded
+                  any candidate points with projected distance smaller than alpha/n is discarded
     :param k:     the number of candidate points to be generated in the i-th iteration
                   (after i-1 points have already been generated)
                   will be equal to k*i
+    :param negligible:   the value considered negligible when mutually comparing
+                         boundaries of different intervals
 
     :return:      the sequence of n sample points from [0,1]^dim.
     """
@@ -141,7 +143,7 @@ def mipt_full(n, dim=2, alpha=0.5, k=100):
 
     for s in range(1, n):
         # minimum allowed projected distance
-        dmin = alpha/s
+        dmin = alpha/(s+1)
 
         # placeholder for the candidates
         candidates = np.zeros((k*s, dim))
@@ -159,15 +161,15 @@ def mipt_full(n, dim=2, alpha=0.5, k=100):
 
                 end_intervals = []
                 for (l1, u1) in start_intervals:
-                    if u2<l1:
+                    if u2<l1+negligible:
                         end_intervals.append((l1,u1))
-                    elif u1<l2:
+                    elif u1<l2+negligible:
                         end_intervals.append((l1,u1))
-                    elif l2<l1 and l1<u2 and u2<u1:
+                    elif l2<l1+negligible and l1<u2+negligible and u2<u1+negligible:
                         end_intervals.append((u2,u1))
-                    elif l1<l2 and l2<u1 and u1<u2:
+                    elif l1<l2+negligible and l2<u1+negligible and u1<u2+negligible:
                         end_intervals.append((l1,l2))
-                    elif l1<l2 and u2<u1:
+                    elif l1<l2+negligible and u2<u1+negligible:
                         end_intervals.append((l1,l2))
                         end_intervals.append((u2,u1))
                     else:

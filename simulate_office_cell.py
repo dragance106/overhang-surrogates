@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from eppy import modeleditor
 from eppy.modeleditor import IDF
 from eppy.runner.run_functions import EnergyPlusRunError
 import os

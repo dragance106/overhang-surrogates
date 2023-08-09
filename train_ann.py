@@ -160,7 +160,7 @@ def train_models(df_training, load):
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[8]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[5, 5]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[6, 3]))
-    all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
+    # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 4, 4]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[4, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 3, 3]))
     # all_trained_models.append(train_dnn_fold(load, train_folds, test_folds, neurons=[3, 3, 3, 2, 2, 2]))
