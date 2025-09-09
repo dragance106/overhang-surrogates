@@ -1,4 +1,4 @@
-# overhang_surrogates: a Python package for sampling, training and visualising surrogate models for building energy simulations
+## overhang_surrogates: a Python package for sampling, training and visualising surrogate models for building energy simulations
 
 The package, which can be installed by `pip install overhang_surrogates`, contains selected methods that:
 - offer Python implementation of the iterative sampling method mc-intersite-proj-th (MIPT) proposed in 
@@ -12,7 +12,7 @@ It consists of the following main methods:
 
 ---
 
-## `mipt(n, dim=2, alpha=0.5, k=100)`
+### `mipt(n, dim=2, alpha=0.5, k=100)`
 
 This function is the basic implementation of the MIPT sampling method (MIPT). Candidate points are chosen from the entire hypercube \([0,1]^{\text{dim}}\).
 
