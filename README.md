@@ -14,15 +14,15 @@ It consists of the following main methods:
 
 `mipt(n, dim=2, alpha=0.5, k=100)`
 
-This function is the basic implementation of the MIPT sampling method (MIPT). Candidate points are chosen from the entire hypercube [0,1]^dim^.
+This function is the basic implementation of the MIPT sampling method (MIPT). Candidate points are chosen from the entire hypercube [0,1]^dim.
 
-**Parameter meanings**
+Parameters:
 - `n` — the sample size to generate.
 - `dim` — the dimension of the space from which samples are drawn.
 - `alpha` — tolerance parameter for the minimal *projected* distance: any candidate point whose projected distance is less than `alpha / n` is discarded from consideration.
 - `k` — factor that determines the number of candidate points (in the `i`-th iteration `k*i` candidate points are generated).
 
-**Returns:** an array of `n` points from the hypercube \([0,1]^{\text{dim}}\).
+Returns: an array of `n` points from the hypercube [0,1]^dim.
 
 ---
 
